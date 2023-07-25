@@ -45,7 +45,7 @@ class Poipiku:
                 data["PG"] = str(count)
                 resp = requests.post(url=self.follow_url, headers=self.headers, cookies=self.cookies, data=data)
 
-                if resp.text.strip():
+                if resp.text.strip(): # Strip away whitespace and empty lines, then check if there is any text
                     count += 1
                     soup = BeautifulSoup(resp.text, "html.parser")
                     for a in soup.find_all("a", href=True):
@@ -64,8 +64,8 @@ class Poipiku:
         p = ps.print_status(text=f"Creating directory for profile ID {self.profile_id}", status="wait")
 
         if not path.endswith("/"):
-            path = path + "/"
-        self.path = path + self.profile_id
+            path = f"{path}/"
+        self.path = f"{path}{self.profile_id}"
 
         try:
             if not os.path.exists(self.path):
@@ -86,24 +86,23 @@ class Poipiku:
         }
 
         try:
+            p = ps.print_status(text=f"Fetching posts for profile ID {self.profile_id} (page {count + 1})", status="wait")
+            
             while True:
-                if count == 0:
-                    p = ps.print_status(text=f"Fetching posts for profile ID {self.profile_id} (page {str(count + 1)})", status="wait")
-
                 data["PG"] = str(count)
                 resp = requests.post(url=self.profile_url, headers=self.headers, cookies=self.cookies, data=data)
 
                 soup = BeautifulSoup(resp.text, "html.parser")
                 pages = soup.find_all("a", class_="IllustInfo")
 
-                if len(pages) != 0:
-                    p.update(text=f"Fetching posts for profile ID {self.profile_id} (page {str(count + 1)})", status="wait")
+                if pages:
+                    p.update(text=f"Fetching posts for profile ID {self.profile_id} (page {count + 1})", status="wait")
                     count += 1
                     for page in pages:
                         illustration_pages.append(f"{self.base_url}{page['href']}")
                 else:
                     break
-            p.last(text=f"Fetched posts for profile ID {self.profile_id} ({str(count)} pages)", status="ok")
+            p.last(text=f"Fetched posts for profile ID {self.profile_id} (page {count})", status="ok")
         except Exception as e:
             p.last(text=f"Could not fetch posts for profile ID {self.profile_id}", status="failed")
             print(e)
@@ -139,22 +138,24 @@ class Poipiku:
         }
 
         try:
-            p = ps.print_status(text=f"Fetching illustrations from post ID {illust_id} (post {str(self.illust_pages_current)} of {str(self.illust_pages_count)})", status="wait")
+            p = ps.print_status(text=f"Fetching illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="wait")
             resp = requests.post(self.illust_url, headers=headers, cookies=self.cookies, data=data).json()
             images = re.findall(pattern, resp["html"])[::-1]
 
-            if len(images) == 0:
+            if not images:
                 self.append_illustration(illust_id, p)
             else:
                 for image in images:
                     illustrations.append("https:{}".format(image))
 
-                if self.illust_pages_current == self.illust_pages_count:
-                    p.last(text=f"Fetched illustrations from post ID {illust_id} (post {str(self.illust_pages_current)} of {str(self.illust_pages_count)})", status="ok")
+                # Update the current console line with the number of posts that have been fetched
+                # Values are set in download_user_profile-function
+                if self.illust_pages_counter == self.illust_pages_total:
+                    p.last(text=f"Fetched illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="ok")
                 else:
                     p.last(text=f"\033[1A", status="ok")
         except Exception as e:
-            p.last(text=f"Could not fetch illustrations from post ID {illust_id} (post {str(self.illust_pages_current)} of {str(self.illust_pages_count)})", status="failed")
+            p.last(text=f"Could not fetch illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="failed")
             print(e)
 
         return illustrations
@@ -193,14 +194,14 @@ class Poipiku:
         urls = []
 
         illust_pages = self.return_user_illustration_pages()
-        self.illust_pages_count = len(illust_pages)
-        self.illust_pages_current = 1
+        self.illust_pages_total = len(illust_pages)
+        self.illust_pages_counter = 1
 
         pattern = r"\/([0-9]+)\.html"
         for page in illust_pages:
             illust_id = re.search(pattern, page).group(1)
             urls.append(self.return_illustrations(illust_id))
-            self.illust_pages_current += 1
+            self.illust_pages_counter += 1
 
         urls = list(chain.from_iterable(urls[::-1]))
         for url in urls:
