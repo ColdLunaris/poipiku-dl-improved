@@ -12,7 +12,7 @@ class Poipiku:
     append_url = f"{base_url}/f/ShowAppendFileF.jsp"
     illust_url = f"{base_url}/f/ShowIllustDetailF.jsp"
 
-    def __init__(self):
+    def __init__(self, directory, quiet):
         try:
             cj = MozillaCookieJar("cookie.txt")
             cj.load(ignore_discard=True, ignore_expires=True)
@@ -26,8 +26,18 @@ class Poipiku:
             "Origin": self.base_url
         }
 
+        if directory is not None:
+            if not directory.endswith("/"):
+                self.path = f"{directory}/"
+            else:
+                self.path = directory
+        else:
+            self.path = f"{os.getcwd()}/poipiku/"
+
+        self.quiet = quiet
+
     def get_quiet_follows(self):
-        p = ps.print_status(text="No URL specified. Fetching quiet follows", status="wait")
+        p = ps.print_status(text="No URL specified. Fetching quiet follows", status="wait") if self.quiet == False else None
         users = []
         count = 0
         data = {
@@ -53,28 +63,26 @@ class Poipiku:
                 else:
                     break
 
-            p.last(text="Fetched quiet follows", status="ok")
+            p.last(text="Fetched quiet follows", status="ok") if self.quiet == False else None
         except Exception as e:
-            p.last(text="Could not fetch quiet follows", status="failed")
+            p.last(text="Could not fetch quiet follows", status="failed") if self.quiet == False else None
             print(e)
 
         return users
 
-    def create_user_directory(self, path=f"{os.getcwd()}/poipiku"):
-        p = ps.print_status(text=f"Creating directory for profile ID {self.profile_id}", status="wait")
+    def create_user_directory(self):
+        p = ps.print_status(text=f"Creating directory for profile ID {self.profile_id}", status="wait") if self.quiet == False else None
 
-        if not path.endswith("/"):
-            path = f"{path}/"
-        self.path = f"{path}{self.profile_id}"
+        self.outdir = f"{self.path}{self.profile_id}"
 
         try:
-            if not os.path.exists(self.path):
-                os.makedirs(self.path)
-                p.last(text=f"Created directry for profile ID {self.profile_id}", status="ok")
+            if not os.path.exists(self.outdir):
+                os.makedirs(self.outdir)
+                p.last(text=f"Created directry for profile ID {self.profile_id}", status="ok") if self.quiet == False else None
             else:
-                p.last(text=f"Directory for profile ID {self.profile_id} already exists", status="ok")
+                p.last(text=f"Directory for profile ID {self.profile_id} already exists", status="ok") if self.quiet == False else None
         except Exception as e:
-            p.last(text="Could not create directory", status="failed")
+            p.last(text="Could not create directory", status="failed") if self.quiet == False else None
             print(e)
 
     def return_user_illustration_pages(self):
@@ -86,7 +94,7 @@ class Poipiku:
         }
 
         try:
-            p = ps.print_status(text=f"Fetching posts for profile ID {self.profile_id} (page {count + 1})", status="wait")
+            p = ps.print_status(text=f"Fetching posts for profile ID {self.profile_id} (page {count + 1})", status="wait") if self.quiet == False else None
             
             while True:
                 data["PG"] = str(count)
@@ -96,15 +104,15 @@ class Poipiku:
                 pages = soup.find_all("a", class_="IllustInfo")
 
                 if pages:
-                    p.update(text=f"Fetching posts for profile ID {self.profile_id} (page {count + 1})", status="wait")
+                    p.update(text=f"Fetching posts for profile ID {self.profile_id} (page {count + 1})", status="wait") if self.quiet == False else None
                     count += 1
                     for page in pages:
                         illustration_pages.append(f"{self.base_url}{page['href']}")
                 else:
                     break
-            p.last(text=f"Fetched posts for profile ID {self.profile_id} (page {count})", status="ok")
+            p.last(text=f"Fetched posts for profile ID {self.profile_id} (page {count})", status="ok") if self.quiet == False else None
         except Exception as e:
-            p.last(text=f"Could not fetch posts for profile ID {self.profile_id}", status="failed")
+            p.last(text=f"Could not fetch posts for profile ID {self.profile_id}", status="failed") if self.quiet == False else None
             print(e)
 
         return illustration_pages   
@@ -128,7 +136,7 @@ class Poipiku:
             }
 
             try:
-                p = ps.print_status(text=f"Fetching illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="wait")
+                p = ps.print_status(text=f"Fetching illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="wait") if self.quiet == False else None
                 resp = requests.post(self.illust_url, headers=headers, cookies=self.cookies, data=data).json()
                 images = re.findall(pattern, resp["html"])[::-1]
 
@@ -147,16 +155,16 @@ class Poipiku:
 
                     if "Password is incorrect" in message:
                         if a_count >= p_count:
-                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed")
+                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed") if self.quiet == False else None
                             break
                         else:
                             a_count += 1
                             continue
                     else:
                         if "IllustItemThumbText" in message:
-                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: Post only includes text.", status="failed")
+                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: Post only includes text.", status="failed") if self.quiet == False else None
                         else:
-                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed")
+                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed") if self.quiet == False else None
                         
                         break
                 else:
@@ -166,14 +174,14 @@ class Poipiku:
                     # Update the current console line with the number of posts that have been fetched
                     # Values are set in download_user_profile-function
                     if self.illust_pages_counter == self.illust_pages_total:
-                        p.last(text=f"Fetched illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="ok")
+                        p.last(text=f"Fetched illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="ok") if self.quiet == False else None
                     else:
-                        p.last(text=f"\033[1A", status="ok")
+                        p.last(text=f"\033[1A", status="ok") if self.quiet == False else None
 
                     break
 
             except Exception as e:
-                p.last(text=f"Could not fetch illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="failed")
+                p.last(text=f"Could not fetch illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="failed") if self.quiet == False else None
                 print(e)
                 break
 
@@ -182,13 +190,13 @@ class Poipiku:
     def save_illustration(self, illust_id, url):
         pattern = r".*\/(.*)"
         filename = re.search(pattern, url).group(1)
-        path = f"{self.path}/{filename}"
+        imgpath = f"{self.outdir}/{filename}"
 
         try:
-            p = ps.print_status(text=f"Downloading {filename}", status="wait")
+            p = ps.print_status(text=f"Downloading {filename}", status="wait") if self.quiet == False else None
 
-            if os.path.exists(path):
-                p.last(text=f"{filename} already exists", status="ok")
+            if os.path.exists(imgpath):
+                p.last(text=f"{filename} already exists", status="ok") if self.quiet == False else None
                 return
             else:
                 headers = self.headers
@@ -196,13 +204,13 @@ class Poipiku:
                 resp = requests.get(url=url, headers=headers, cookies=self.cookies, stream=True)
 
                 if resp.status_code == 200:
-                    with open(f"{path}.tmp", "wb") as file:
+                    with open(f"{imgpath}.tmp", "wb") as file:
                         for chunk in resp:
                             file.write(chunk)
-                    os.rename(f"{path}.tmp", path)
-                    p.last(text=f"{filename} downloaded successfully", status="ok")
+                    os.rename(f"{imgpath}.tmp", imgpath)
+                    p.last(text=f"{filename} downloaded successfully", status="ok") if self.quiet == False else None
         except Exception as e:
-            p.last(text=f"Could not download {filename}", status="failed")
+            p.last(text=f"Could not download {filename}", status="failed") if self.quiet == False else None
             print(e)
 
     def download_user_profile(self, url, passwords):
@@ -230,6 +238,8 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("-u", dest="url", type=str, required=False, help="url to profile")
     p.add_argument("-p", dest="passwords", type=str, required=False, help="comma-separated list of passwords to attempt")
+    p.add_argument("-d", dest="directory", type=str, required=False, help="output directory")
+    p.add_argument("-q", dest="quiet", action="store_true", required=False, help="disable output")
     args = p.parse_args()
 
     return args
@@ -237,7 +247,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    poipiku = Poipiku()
+    poipiku = Poipiku(args.directory, args.quiet)
 
     # If a URL is supplied, only fetch that profile
     if args.url is not None:
