@@ -1,4 +1,4 @@
-import requests, re, os
+import requests, re, os, argparse
 from http.cookiejar import MozillaCookieJar
 from bs4 import BeautifulSoup
 from itertools import chain
@@ -27,7 +27,7 @@ class Poipiku:
         }
 
     def get_quiet_follows(self):
-        p = ps.print_status(text="Fetching quiet follows", status="wait")
+        p = ps.print_status(text="No URL specified. Fetching quiet follows", status="wait")
         users = []
         count = 0
         data = {
@@ -107,56 +107,75 @@ class Poipiku:
             p.last(text=f"Could not fetch posts for profile ID {self.profile_id}", status="failed")
             print(e)
 
-        return illustration_pages
-
-    # This is only a helper-function to "return_illustrations" and will only print the failure-reason to the console
-    def append_illustration(self, illust_id, log):
-        headers = self.headers
-        headers["Referer"] = f"{self.base_url}/{self.profile_id}/{illust_id}.html"
-        data = {
-            "UID": self.profile_id,
-            "IID": illust_id,
-            "MD": "0",
-            "TWF": "-1",
-            "PAS": self.password
-        }
-
-        resp = requests.post(url=self.append_url, headers=headers, cookies=self.cookies, data=data).json()
-        message = resp["html"].split("<br/>")[0].split("<br>")[0]
-        log.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed")
+        return illustration_pages   
 
     def return_illustrations(self, illust_id):
         headers = self.headers
         headers["Referer"] = f"{self.base_url}/{self.profile_id}/{illust_id}.html"
         pattern = r"src=\"(.*?)\""
         illustrations = []
-        data = {
-            "ID": self.profile_id,
-            "TD": illust_id,
-            "AD": "-1",
-            "PAS": self.password
-        }
 
-        try:
-            p = ps.print_status(text=f"Fetching illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="wait")
-            resp = requests.post(self.illust_url, headers=headers, cookies=self.cookies, data=data).json()
-            images = re.findall(pattern, resp["html"])[::-1]
+        a_count = 0
+        p_count = len(self.passwords) - 1
 
-            if not images:
-                self.append_illustration(illust_id, p)
-            else:
-                for image in images:
-                    illustrations.append("https:{}".format(image))
+        # Loop through all provided passwords until post is loaded
+        while a_count <= p_count:
+            data = {
+                "ID": self.profile_id,
+                "TD": illust_id,
+                "AD": "-1",
+                "PAS": self.passwords[a_count]
+            }
 
-                # Update the current console line with the number of posts that have been fetched
-                # Values are set in download_user_profile-function
-                if self.illust_pages_counter == self.illust_pages_total:
-                    p.last(text=f"Fetched illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="ok")
+            try:
+                p = ps.print_status(text=f"Fetching illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="wait")
+                resp = requests.post(self.illust_url, headers=headers, cookies=self.cookies, data=data).json()
+                images = re.findall(pattern, resp["html"])[::-1]
+
+                if not images:
+                    data = {
+                        "UID": self.profile_id,
+                        "IID": illust_id,
+                        "MD": "0",
+                        "TWF": "-1",
+                        "PAS": self.passwords[a_count]
+                    }
+
+                    # Need to make a different request to get the error message
+                    resp = requests.post(url=self.append_url, headers=headers, cookies=self.cookies, data=data).json()
+                    message = resp["html"].split("<br/>")[0].split("<br>")[0]
+
+                    if "Password is incorrect" in message:
+                        if a_count >= p_count:
+                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed")
+                            break
+                        else:
+                            a_count += 1
+                            continue
+                    else:
+                        if "IllustItemThumbText" in message:
+                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: Post only includes text.", status="failed")
+                        else:
+                            p.last(text=f"Failed to get illustrations for post ID {illust_id}. Reason: {message}", status="failed")
+                        
+                        break
                 else:
-                    p.last(text=f"\033[1A", status="ok")
-        except Exception as e:
-            p.last(text=f"Could not fetch illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="failed")
-            print(e)
+                    for image in images:
+                        illustrations.append("https:{}".format(image))
+
+                    # Update the current console line with the number of posts that have been fetched
+                    # Values are set in download_user_profile-function
+                    if self.illust_pages_counter == self.illust_pages_total:
+                        p.last(text=f"Fetched illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="ok")
+                    else:
+                        p.last(text=f"\033[1A", status="ok")
+
+                    break
+
+            except Exception as e:
+                p.last(text=f"Could not fetch illustrations from post ID {illust_id} (post {self.illust_pages_counter} of {self.illust_pages_total})", status="failed")
+                print(e)
+                break
 
         return illustrations
 
@@ -186,9 +205,9 @@ class Poipiku:
             p.last(text=f"Could not download {filename}", status="failed")
             print(e)
 
-    def download_user_profile(self, url, password="yes"):
+    def download_user_profile(self, url, passwords):
         pattern = r"\/([0-9]+)\/"
-        self.password = password
+        self.passwords = passwords
         self.profile_id = re.search(pattern, url).group(1)
         self.create_user_directory()
         urls = []
@@ -207,13 +226,34 @@ class Poipiku:
         for url in urls:
             self.save_illustration(illust_id, url)
 
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("-u", dest="url", type=str, required=False, help="url to profile")
+    p.add_argument("-p", dest="passwords", type=str, required=False, help="comma-separated list of passwords to attempt")
+    args = p.parse_args()
+
+    return args
 
 def main():
+    args = parse_args()
+
     poipiku = Poipiku()
-    users = poipiku.get_quiet_follows()
+
+    # If a URL is supplied, only fetch that profile
+    if args.url is not None:
+        users = [args.url]
+    else:
+        users = poipiku.get_quiet_follows()
+
+    # Always try "yes" as a password first, then try user supplied ones
+    if args.passwords is not None:
+        p = [s.strip() for s in args.passwords.split(",")]
+        p.insert(0, "yes")
+    else:
+        p = ["yes"]
 
     for user in users:
-        poipiku.download_user_profile(user, password="yes")
+        poipiku.download_user_profile(user, passwords=p)
 
 
 if __name__ == "__main__":
