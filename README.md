@@ -16,8 +16,6 @@ Note that none of the arguments below are required
 | Argument | Description |
 | -------- | ----------- |
 | `-u URL` | URL to profile to download. If not specified the script will fetch quiet follows |
-| `-p PASS,WORD` | Passwords to be attempted on protected posts. Can be a comma-separated list |
-| `-d DIRECTORY` | Output directory. Defaults to working directory |
 | `-q` | Disables output to stdout |
 
-For passwords "yes" will always be attempted, so there is no need to supply this
+You can also edit `config.yml` and specify other parameters there, like passwords to attempt, cookies and output directory. The script looks for the config file in the same directory as `main.py`.

@@ -1,0 +1,5 @@
+passwords:
+  - yes190
+  - 137
+directory: "/path/to/poipiku-dl-improved"
+cookies: "/path/to/poipiku-dl-improved/cookie.txt"

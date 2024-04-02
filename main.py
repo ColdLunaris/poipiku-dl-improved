@@ -1,4 +1,4 @@
-import requests, re, os, argparse
+import requests, re, os, argparse, yaml
 from http.cookiejar import MozillaCookieJar
 from bs4 import BeautifulSoup
 from itertools import chain
@@ -12,11 +12,12 @@ class Poipiku:
     append_url = f"{base_url}/f/ShowAppendFileF.jsp"
     illust_url = f"{base_url}/f/ShowIllustDetailF.jsp"
 
-    def __init__(self, directory, quiet):
+    def __init__(self, cookies, directory, quiet):
         try:
-            cj = MozillaCookieJar("cookie.txt")
-            cj.load(ignore_discard=True, ignore_expires=True)
-            self.cookies = cj
+            if cookies is not None:
+                cj = MozillaCookieJar(cookies)
+                cj.load(ignore_discard=True, ignore_expires=True)
+                self.cookies = cj
         except Exception as e:
             print(e)
 
@@ -28,7 +29,7 @@ class Poipiku:
 
         if directory is not None:
             if not directory.endswith("/"):
-                self.path = f"{directory}/"
+                self.path = f"{directory}/poipiku/"
             else:
                 self.path = directory
         else:
@@ -214,7 +215,7 @@ class Poipiku:
             print(e)
 
     def download_user_profile(self, url, passwords):
-        pattern = r"\/([0-9]+)\/"
+        pattern = r"\/([0-9]+)"
         self.passwords = passwords
         self.profile_id = re.search(pattern, url).group(1)
         self.create_user_directory()
@@ -237,8 +238,6 @@ class Poipiku:
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("-u", dest="url", type=str, required=False, help="url to profile")
-    p.add_argument("-p", dest="passwords", type=str, required=False, help="comma-separated list of passwords to attempt")
-    p.add_argument("-d", dest="directory", type=str, required=False, help="output directory")
     p.add_argument("-q", dest="quiet", action="store_true", required=False, help="disable output")
     args = p.parse_args()
 
@@ -247,7 +246,27 @@ def parse_args():
 def main():
     args = parse_args()
 
-    poipiku = Poipiku(args.directory, args.quiet)
+    passwords = ["yes"]
+
+    yamlfile = f"{os.path.dirname(os.path.realpath(__file__))}/config.yml"
+    with open(yamlfile, "r") as cfgfile:
+        config = yaml.safe_load(cfgfile)
+        
+    if "passwords" in config is not None:
+        passwords.append([str(s).strip() for s in config["passwords"]])
+
+    if "cookies" in config is not None:
+        cookies = config["cookies"]
+    else:
+        cookies = None
+
+    if "directory" in config is not None:
+        directory = config["directory"]
+    else:
+        directory = None
+
+
+    poipiku = Poipiku(cookies, directory, args.quiet)
 
     # If a URL is supplied, only fetch that profile
     if args.url is not None:
@@ -255,15 +274,8 @@ def main():
     else:
         users = poipiku.get_quiet_follows()
 
-    # Always try "yes" as a password first, then try user supplied ones
-    if args.passwords is not None:
-        p = [s.strip() for s in args.passwords.split(",")]
-        p.insert(0, "yes")
-    else:
-        p = ["yes"]
-
     for user in users:
-        poipiku.download_user_profile(user, passwords=p)
+        poipiku.download_user_profile(user, passwords=passwords)
 
 
 if __name__ == "__main__":
